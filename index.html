@@ -257,7 +257,9 @@ tailwind.config = { theme: { extend: {
         <div class="rounded-md border border-slate-300 p-3"><div class="lbl">รวมจำนวน Drop</div><div class="text-2xl font-bold text-navy-800"><span x-text="trips"></span> <span class="text-sm font-medium text-slate-500">Drop</span></div></div>
         <div class="rounded-md border border-slate-300 p-3"><label class="lbl">จำนวนเที่ยว (พนักงานกรอก)</label><input type="number" min="0" step="1" class="field" x-model.number="doc.tripCount" inputmode="numeric" placeholder="กรอกจำนวนเที่ยว"></div>
         <div class="rounded-md border border-slate-300 p-3"><label class="lbl">จำนวนคืนค้างคืน (พนักงานกรอก)</label><input type="number" min="0" step="1" class="field" x-model.number="doc.overnightCount" inputmode="numeric" placeholder="กรอกจำนวนคืน"></div>
-        <div class="rounded-md border border-slate-300 p-3"><div class="lbl">รวมน้ำหนักสินค้า</div><div class="text-2xl font-bold text-navy-800"><span x-text="fmt(totalKg)"></span> <span class="text-sm font-medium text-slate-500">KG</span></div></div>
+        <div class="rounded-md border border-slate-300 p-3"><div class="lbl">รวมน้ำหนักสินค้า</div><div class="text-2xl font-bold text-navy-800"><span x-text="fmt(totalKg)"></span> <span class="text-sm font-medium text-slate-500">KG</span></div>
+          <div x-show="loadPct(doc) !== null" class="mt-2"><div class="h-2 bg-slate-100 rounded"><div class="h-2 rounded" :class="loadBar(doc)" :style="'width:' + Math.min(100, loadPct(doc) || 0) + '%'"></div></div><div class="text-xs mt-1 font-semibold" :class="loadCls(doc)" x-text="'บรรทุก ' + loadText(doc)"></div></div>
+          <div x-show="doc.vehicle && loadPct(doc) === null" class="text-xs mt-1 text-slate-500">ยังไม่ได้ตั้ง Max load ของรถคันนี้ (ตั้งที่ Admin → ทะเบียนรถ)</div></div>
         <div class="rounded-md border border-slate-300 p-3"><label class="lbl">น้ำมัน (ลิตร)</label><input type="number" min="0" step="any" class="field" x-model.number="doc.fuelLiters" inputmode="decimal"></div>
         <div class="rounded-md border border-slate-300 p-3"><label class="lbl">น้ำมัน (บาท)</label><input type="number" min="0" step="any" class="field" x-model.number="doc.fuelBaht" inputmode="decimal"></div>
         <div class="rounded-md border border-slate-300 p-3"><label class="lbl">ค่าทางด่วน (บาท)</label><input type="number" min="0" step="any" class="field" x-model.number="doc.tollFee" inputmode="decimal"></div>
@@ -351,7 +353,7 @@ tailwind.config = { theme: { extend: {
             <span class="text-sm" x-show="j.d.driver" x-text="'ขับโดย ' + j.d.driver"></span>
             <span x-show="j.isToday" class="text-xs bg-white text-navy-800 rounded px-2 py-0.5">วันนี้</span>
             <span class="text-xs font-semibold rounded px-2 py-0.5 bg-white/25" x-text="statText(j.d)"></span>
-            <span class="ml-auto text-sm" x-text="j.st.stops + ' จุดส่ง, ' + fmt(j.st.kg) + ' KG'"></span>
+            <span class="ml-auto text-sm" x-text="j.st.stops + ' จุดส่ง, ' + fmt(j.st.kg) + ' KG' + (loadPct(j.d) !== null ? ' (' + fmt(loadPct(j.d)) + '%)' : '')"></span>
           </div>
           <div class="divide-y divide-slate-200">
             <template x-for="(sp, si) in j.stops" :key="si">
@@ -389,7 +391,8 @@ tailwind.config = { theme: { extend: {
             </div>
             <p class="inline-block text-xs font-semibold rounded px-2 py-0.5 bg-white/25 mt-1" x-text="statText(jobView.d)"></p>
             <p class="text-sm text-white/90 mt-1" x-text="'ขับโดย ' + (jobView.d.driver || '-') + (jobView.d.crew ? ', ผู้ช่วย ' + jobView.d.crew : '')"></p>
-            <p class="mt-2 text-sm" x-text="'เสร็จแล้ว ' + jobView.done + ' / ' + jobView.stops.length + ' จุดส่ง, รวม ' + fmt(jobView.st.kg) + ' KG'"></p><div class="no-print flex flex-wrap gap-2 mt-3"><button class="btn bg-green-600 text-white hover:bg-green-700" @click="shareLine(jobView.d)">ส่งทาง LINE</button><button class="btn bg-white text-navy-800" @click="shareJob(jobView.d)">แชร์ใบงาน</button><button class="btn bg-white text-navy-800" @click="copyShare(jobView.d)">คัดลอก</button></div>
+            <p class="mt-2 text-sm" x-text="'เสร็จแล้ว ' + jobView.done + ' / ' + jobView.stops.length + ' จุดส่ง, รวม ' + fmt(jobView.st.kg) + ' KG'"></p>
+            <p x-show="loadPct(jobView.d) !== null" class="text-sm font-semibold mt-1" x-text="'บรรทุก ' + loadText(jobView.d)"></p><div class="no-print flex flex-wrap gap-2 mt-3"><button class="btn bg-green-600 text-white hover:bg-green-700" @click="shareLine(jobView.d)">ส่งทาง LINE</button><button class="btn bg-white text-navy-800" @click="shareJob(jobView.d)">แชร์ใบงาน</button><button class="btn bg-white text-navy-800" @click="copyShare(jobView.d)">คัดลอก</button></div>
           </div>
 
           <fieldset :disabled="jobView.d.status === 'verified'" class="space-y-3 min-w-0">
@@ -679,16 +682,16 @@ tailwind.config = { theme: { extend: {
         <h3 class="font-semibold text-navy-800 mb-3" x-text="'ทะเบียนรถ (' + master.vehicles.length + ')'"></h3>
         <div class="flex flex-wrap gap-2 mb-3">
           <input class="field flex-1 min-w-[8rem]" x-model="newVeh.plate" placeholder="ทะเบียน เช่น 96-1251" @keydown.enter="addVehicle()">
-          <input class="field flex-1 min-w-[8rem]" x-model="newVeh.note" placeholder="หมายเหตุ (ไม่บังคับ)" @keydown.enter="addVehicle()"><select class="field w-auto" x-model="newVeh.type"><option value="own">รถบริษัท</option><option value="rental">รถเช่า</option><template x-for="g in groupList" :key="g.id"><option :value="g.id" x-text="g.name"></option></template></select>
+          <input class="field flex-1 min-w-[8rem]" x-model="newVeh.note" placeholder="หมายเหตุ (ไม่บังคับ)" @keydown.enter="addVehicle()"><input type="number" min="0" step="any" class="field w-36" x-model.number="newVeh.maxLoad" placeholder="Max load (KG)" inputmode="decimal" @keydown.enter="addVehicle()"><select class="field w-auto" x-model="newVeh.type"><option value="own">รถบริษัท</option><option value="rental">รถเช่า</option><template x-for="g in groupList" :key="g.id"><option :value="g.id" x-text="g.name"></option></template></select>
           <button class="btn bg-navy-700 text-white hover:bg-navy-800" @click="addVehicle()">เพิ่ม</button>
         </div>
         <table class="tbl w-full text-sm border-collapse">
-          <thead class="bg-navy-50 text-navy-800"><tr><th>ทะเบียน</th><th>ประเภท</th><th>หมายเหตุ</th><th></th></tr></thead>
+          <thead class="bg-navy-50 text-navy-800"><tr><th>ทะเบียน</th><th>ประเภท</th><th>Max load (KG)</th><th>หมายเหตุ</th><th></th></tr></thead>
           <tbody>
             <template x-for="v in master.vehicles" :key="v.id">
               <tr>
                 <td><div class="flex items-center gap-2"><span class="inline-block w-5 h-5 rounded-full shrink-0" :style="'background:' + vc(v.plate).bg"></span><input class="field" x-model="v.plate" aria-label="ทะเบียนรถ"></div></td>
-                <td><select class="field" x-model="v.type" aria-label="ประเภทรถ"><option value="own">รถบริษัท</option><option value="rental">รถเช่า</option><template x-for="g in groupList" :key="g.id"><option :value="g.id" x-text="g.name"></option></template></select></td><td><input class="field" x-model="v.note" aria-label="หมายเหตุ"></td>
+                <td><select class="field" x-model="v.type" aria-label="ประเภทรถ"><option value="own">รถบริษัท</option><option value="rental">รถเช่า</option><template x-for="g in groupList" :key="g.id"><option :value="g.id" x-text="g.name"></option></template></select></td><td style="min-width:7rem"><input type="number" min="0" step="any" class="field" x-model.number="v.maxLoad" aria-label="Max load (KG)" inputmode="decimal"></td><td><input class="field" x-model="v.note" aria-label="หมายเหตุ"></td>
                 <td class="text-center"><button class="text-red-600 text-xs underline" @click="removeVehicle(v)">ลบ</button></td>
               </tr>
             </template>
@@ -837,7 +840,7 @@ function dispatchApp() {
     dx: { from: today().slice(0, 8) + '01', to: today(), vehicle: '', status: '' }, dxMsg: '', dxErr: false,
     authSession: '', authUser: null, authMsg: '', authBusy: false, loginForm: { username: '', password: '' },
     newAccount: { username: '', password: '', role: 'user' }, users: [], userBusy: false, userMsg: '', userMsgOk: true,
-    newVeh: { plate: '', note: '', type: 'own' }, adminMsg: '', adminOk: true,
+    newVeh: { plate: '', note: '', type: 'own', maxLoad: null }, adminMsg: '', adminOk: true,
     units: ['KG','TON','PAIL','BAG','DRUM','IBC','CARTON','PCS'],
     checklistLabels: {
       pack: 'ภาชนะบรรจุ วัสดุบรรจุ และฉลากอยู่ในสภาพสมบูรณ์ก่อนการขนส่ง',
@@ -1177,8 +1180,8 @@ function dispatchApp() {
       const n = this.newVeh.plate.trim();
       if (!n) return this.msg(false, 'กรุณากรอกทะเบียนรถ');
       if (this.master.vehicles.some(v => v.plate.trim().toLowerCase() === n.toLowerCase())) return this.msg(false, 'มีทะเบียน "' + n + '" อยู่แล้ว');
-      this.master.vehicles.push({ id: uid(), plate: n, note: this.newVeh.note.trim(), type: this.newVeh.type || 'own' });
-      this.newVeh.plate = ''; this.newVeh.note = ''; this.msg(true, 'เพิ่มทะเบียนแล้ว: ' + n);
+      this.master.vehicles.push({ id: uid(), plate: n, note: this.newVeh.note.trim(), type: this.newVeh.type || 'own', maxLoad: Number(this.newVeh.maxLoad) || 0 });
+      this.newVeh.plate = ''; this.newVeh.note = ''; this.newVeh.maxLoad = null; this.msg(true, 'เพิ่มทะเบียนแล้ว: ' + n);
     },
     removeVehicle(v) {
       this.ask('ลบทะเบียน "' + v.plate + '"? ใบงานเก่าที่ใช้ทะเบียนนี้จะไม่ถูกแก้ไข', () => { this.master.vehicles = this.master.vehicles.filter(x => x.id !== v.id); this.msg(true, 'ลบทะเบียนแล้ว'); });
@@ -1326,6 +1329,11 @@ function dispatchApp() {
     autoStartMile(d) { if (!Number(d.startMile)) { const p = this.prevMile(d); if (p) d.startMile = p.value; } },
     mileWarn(d) { const p = this.prevMile(d), s = Number(d.startMile); return !!(p && s && s < p.value); },
     mileHint(d) { const p = this.prevMile(d); if (!p) return ''; return 'ก่อนหน้า: ' + this.fmt(p.value) + ' กม. (ใบงาน ' + p.docNo + ')' + (this.mileWarn(d) ? ' · เลขไมล์ออกน้อยกว่าครั้งก่อน กรุณาตรวจสอบ' : ''); },
+    maxLoadOf(plate) { const v = this.master.vehicles.find(x => this.normPlate(x.plate) === this.normPlate(plate) && this.normPlate(plate)); return v ? Number(v.maxLoad) || 0 : 0; },
+    loadPct(d) { const m = this.maxLoadOf(d.vehicle); return m ? Math.round(this.docStats(d).kg / m * 1000) / 10 : null; },
+    loadText(d) { const p = this.loadPct(d); return p === null ? '' : this.fmt(p) + '% ของ Max load ' + this.fmt(this.maxLoadOf(d.vehicle)) + ' KG' + (p > 100 ? ' · เกิน Max load' : ''); },
+    loadCls(d) { const p = this.loadPct(d); return p > 100 ? 'text-red-600' : (p >= 90 ? 'text-amber-600' : 'text-green-700'); },
+    loadBar(d) { const p = this.loadPct(d); return p > 100 ? 'bg-red-500' : (p >= 90 ? 'bg-amber-500' : 'bg-green-600'); },
     mileErr(d) { const a = Number(d.startMile), b = Number(d.endMile); return !!(a && b && b < a); },
     get jobView() {
       if (this.jobId === null) return null;
@@ -1568,10 +1576,10 @@ function dispatchApp() {
       const docs = this.dxDocs(kind === 'all'), nv = v => (v === null || v === undefined) ? '' : v;
       if (kind === 'docs') {
         const head = ['วันที่', 'เลขที่ใบงาน', 'ทะเบียนรถ', 'พนักงานขับรถ', 'ผู้ช่วย', 'สถานะใบงาน', 'จำนวน Drop', 'จำนวนเที่ยว', 'จำนวนคืนค้างคืน', 'จำนวนรายการสินค้า',
-          'น้ำหนักรวม (KG)', 'เลขไมล์ออกจากโกดัง', 'เลขไมล์กลับถึงโกดัง', 'ระยะทางรวม (กม.)', 'น้ำมัน (ลิตร)', 'น้ำมัน (บาท)', 'ค่าทางด่วน (บาท)', 'ค่าเที่ยว (บาท)', 'ค่าค้างคืน (บาท)', 'ค่าตอบแทนรวม (บาท)',
+          'น้ำหนักรวม (KG)', 'Max load (KG)', 'บรรทุก (%)', 'เลขไมล์ออกจากโกดัง', 'เลขไมล์กลับถึงโกดัง', 'ระยะทางรวม (กม.)', 'น้ำมัน (ลิตร)', 'น้ำมัน (บาท)', 'ค่าทางด่วน (บาท)', 'ค่าเที่ยว (บาท)', 'ค่าค้างคืน (บาท)', 'ค่าตอบแทนรวม (บาท)',
           'ผู้ตรวจสอบ', 'ชื่อผู้ตรวจสอบท้ายใบงาน', 'เวลาจบงาน', 'เวลาตรวจสอบ'];
         return [head].concat(docs.map(d => { const st = this.docStats(d), f = this.fees(d);
-          return [d.date, d.docNo, d.vehicle, d.driver, d.crew, this.stat(d).label, st.stops, nv(d.tripCount), nv(d.overnightCount), st.items, st.kg,
+          return [d.date, d.docNo, d.vehicle, d.driver, d.crew, this.stat(d).label, st.stops, nv(d.tripCount), nv(d.overnightCount), st.items, st.kg, this.maxLoadOf(d.vehicle) || '', nv(this.loadPct(d)),
             nv(d.startMile), nv(d.endMile), st.dist, nv(d.fuelLiters), nv(d.fuelBaht), nv(d.tollFee), f.trip, f.night, f.total, d.verifiedBy || '', d.signChecker || '',
             d.doneAt ? this.when(d.doneAt) : '', d.verifiedAt ? this.when(d.verifiedAt) : '']; }));
       }
@@ -1722,7 +1730,7 @@ function dispatchApp() {
         + '<div class="top"><div style="display:flex;gap:8px;align-items:center"><img src="' + LOGO + '" style="width:44px;height:44px;border-radius:6px"><div><h1>ใบบันทึกการส่งสินค้ารายวัน</h1>VS Chem · Daily Dispatch &amp; Delivery Record</div></div><div style="text-align:right">เลขที่ใบงาน<br><b style="font-size:18px">' + e(d.docNo) + '</b></div></div>'
         + '<div class="info"><div><b>วันที่:</b> ' + e(d.date) + '</div><div><b>ทะเบียนรถ:</b> ' + e(d.vehicle) + '</div><div><b>พนักงานขับรถ:</b> ' + e(d.driver) + '</div><div><b>ผู้ช่วย:</b> ' + e(crew.join(', ')) + '</div></div>'
         + '<table><thead><tr><th>INV#</th><th>ชื่อลูกค้า</th><th>สินค้า</th><th>จำนวน</th><th>หน่วย</th><th>Batch No.</th><th>สถานที่ส่ง</th><th>เวลาเข้า</th><th>เวลาออก</th><th>เลขไมล์</th><th>หมายเหตุ</th></tr></thead><tbody>' + rows + '</tbody></table>'
-        + '<div class="sum"><span>จุดส่ง: ' + st.stops + '</span><span>จำนวนเที่ยว: ' + e(d.tripCount) + '</span><span>ค้างคืน: ' + e(d.overnightCount) + '</span><span>น้ำหนักรวม: ' + this.fmt(st.kg) + ' KG</span><span>ไมล์ออก: ' + e(d.startMile) + '</span><span>ไมล์กลับ: ' + e(d.endMile) + '</span><span>ระยะทาง: ' + this.fmt(dist) + ' กม.</span><span>น้ำมัน: ' + e(d.fuelLiters) + ' ลิตร / ' + e(d.fuelBaht) + ' บาท</span><span>ค่าทางด่วน: ' + e(d.tollFee) + ' บาท</span></div>'
+        + '<div class="sum"><span>จุดส่ง: ' + st.stops + '</span><span>จำนวนเที่ยว: ' + e(d.tripCount) + '</span><span>ค้างคืน: ' + e(d.overnightCount) + '</span><span>น้ำหนักรวม: ' + this.fmt(st.kg) + ' KG' + (this.loadPct(d) !== null ? ' (' + this.fmt(this.loadPct(d)) + '% ของ Max load ' + this.fmt(this.maxLoadOf(d.vehicle)) + ' KG)' : '') + '</span><span>ไมล์ออก: ' + e(d.startMile) + '</span><span>ไมล์กลับ: ' + e(d.endMile) + '</span><span>ระยะทาง: ' + this.fmt(dist) + ' กม.</span><span>น้ำมัน: ' + e(d.fuelLiters) + ' ลิตร / ' + e(d.fuelBaht) + ' บาท</span><span>ค่าทางด่วน: ' + e(d.tollFee) + ' บาท</span></div>'
         + '<div><b>เช็คลิสต์ก่อนออกเดินทาง</b>' + chk + '</div>'
         + '<div class="sig"><div>' + e(d.signDriver || d.driver) + '<br>พนักงานขับรถ</div><div>' + e(d.signChecker) + '<br>ผู้ตรวจสอบ</div></div>'
         + (auto === false ? '' : '<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script>') + '</body></html>';
