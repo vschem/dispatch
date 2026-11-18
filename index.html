@@ -63,7 +63,7 @@ tailwind.config = { theme: { extend: {
         <button type="submit" class="btn w-full bg-navy-700 text-white hover:bg-navy-800" :disabled="authBusy" x-text="authBusy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'"></button>
       </form><p class="text-xs text-slate-400 text-center mt-4">กรุณาเข้าสู่ระบบด้วยบัญชีที่ผู้ดูแลกำหนด</p>
       <details class="mt-4 text-xs text-slate-600 border-t border-slate-200 pt-3">
-        <summary class="cursor-pointer font-semibold">ตั้งค่า Google Sheet </summary>
+        <summary class="cursor-pointer font-semibold">ตั้งค่า Google Sheet (ซิงค์ข้อมูลเมื่อใช้นอก claude.ai)</summary>
         <p class="mt-2">วาง URL ของ Web app (ลงท้าย /exec) และรหัสลับ (TOKEN) ที่ตั้งใน Apps Script ทำครั้งเดียวต่อเครื่อง</p>
         <input class="field text-xs mt-2" x-model.trim="sheetUrl" placeholder="https://script.google.com/macros/s/.../exec">
         <input class="field text-xs mt-2" x-model.trim="sheetToken" placeholder="TOKEN">
@@ -519,6 +519,39 @@ tailwind.config = { theme: { extend: {
       </template>
     </div>
     <div class="bg-white rounded-md border border-slate-200 p-4">
+      <h3 class="font-semibold text-navy-800 mb-1">Downtime ของรถ (วัน)</h3>
+      <p class="text-xs text-slate-600 mb-3">นับวันทำงาน (จันทร์-ศุกร์ ไม่รวมวันหยุดตามประเพณีที่ตั้งไว้ในแท็บ Admin) ที่รถทะเบียนนั้นไม่มีใบงานเลย ไม่นับวันเสาร์-อาทิตย์ และไม่นับวันในอนาคต</p>
+      <div class="grid sm:grid-cols-4 gap-3 mb-3">
+        <div><label class="lbl">ตั้งแต่วันที่</label><input type="date" class="field" x-model="dt.from"></div>
+        <div><label class="lbl">ถึงวันที่</label><input type="date" class="field" x-model="dt.to"></div>
+        <div><label class="lbl">กลุ่มรถ</label><select class="field" x-model="dt.group"><option value="">ทุกกลุ่ม</option><option value="own">รถบริษัท</option><option value="rental">รถเช่า</option><template x-for="g in groupList" :key="g.id"><option :value="g.id" x-text="g.name"></option></template></select></div>
+        <div class="rounded-md border border-navy-600 bg-navy-50 p-2"><div class="lbl">Downtime รวม</div><div class="text-xl font-bold text-navy-800"><span x-text="fmt(dtTotal.down)"></span> <span class="text-sm font-medium text-slate-500">วัน</span></div></div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="tbl w-full text-sm border-collapse min-w-[640px]">
+          <thead class="bg-navy-50 text-navy-800"><tr><th>ทะเบียน</th><th>กลุ่ม</th><th>วันทำงาน</th><th>วิ่งงาน</th><th>Downtime (วัน)</th><th>อัตราการใช้รถ</th><th></th></tr></thead>
+          <tbody>
+            <template x-for="r in dtRows" :key="r.id">
+              <tr>
+                <td class="px-2"><span class="rounded px-2 py-0.5 font-semibold whitespace-nowrap" :style="chip(r.plate)" x-text="r.plate"></span></td>
+                <td class="px-2" x-text="r.fleet"></td><td class="px-2" x-text="r.work"></td><td class="px-2" x-text="r.run"></td>
+                <td class="px-2 font-semibold" :class="r.down ? 'text-red-600' : 'text-green-700'" x-text="r.down"></td>
+                <td class="px-2" x-text="r.pct + '%'"></td>
+                <td class="px-2 whitespace-nowrap"><button x-show="r.down" class="text-navy-700 text-xs underline" @click="dtOpen = (dtOpen === r.id ? '' : r.id)" x-text="dtOpen === r.id ? 'ซ่อนวัน' : 'ดูวัน'"></button></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+      <template x-for="r in dtRows.filter(x => x.id === dtOpen)" :key="r.id"><p class="text-xs text-slate-700 mt-2 break-words" x-text="'Downtime ' + r.plate + ': ' + r.dates.join(', ')"></p></template>
+      <p x-show="!dtRows.length" class="text-sm text-slate-500 mt-2">ไม่มีข้อมูล ตรวจสอบช่วงวันที่ และทะเบียนรถในแท็บ Admin</p>
+      <div class="flex flex-wrap gap-2 mt-3">
+        <button class="btn bg-navy-700 text-white hover:bg-navy-800" @click="exportDowntime('summary')">ส่งออกสรุป Downtime (CSV)</button>
+        <button class="btn bg-white border border-navy-700 text-navy-700 hover:bg-navy-50" @click="exportDowntime('detail')">ส่งออกรายวัน (CSV)</button>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-md border border-slate-200 p-4">
       <h3 class="font-semibold text-navy-800 mb-1">ส่งออก CSV</h3>
       <p class="text-xs text-slate-600 mb-3">เลือกช่วงเวลาและตัวกรอง แล้วเลือกรูปแบบไฟล์ ไฟล์เปิดใน Excel ได้และภาษาไทยไม่เพี้ยน</p>
       <div class="flex flex-wrap gap-2 mb-3">
@@ -661,6 +694,23 @@ tailwind.config = { theme: { extend: {
         <p x-show="!master.employees.length" class="text-sm text-slate-500 mt-2">ยังไม่มีพนักงาน เพิ่มชื่อด้านบนได้เลย</p>
       </div>
 
+      <div class="bg-white rounded-md border border-slate-200 p-4">
+        <h3 class="font-semibold text-navy-800 mb-1" x-text="'วันหยุดตามประเพณี (' + master.holidays.length + ' วัน)'"></h3>
+        <p class="text-xs text-slate-600 mb-3">ใช้คำนวณ Downtime: วันเสาร์-อาทิตย์ไม่นับอยู่แล้ว วันที่ตั้งไว้ที่นี่จะไม่ถูกนับเป็น Downtime วันหยุดของบริษัทเอกชนอาจต่างจากข้าราชการ ควรตรวจเทียบกับประกาศของบริษัท</p>
+        <div class="flex flex-wrap gap-2 mb-2">
+          <input type="date" class="field w-40" x-model="newHoliday.date">
+          <input class="field flex-1 min-w-[8rem]" x-model="newHoliday.name" placeholder="ชื่อวันหยุด" @keydown.enter="addHoliday()">
+          <button class="btn bg-navy-700 text-white hover:bg-navy-800" @click="addHoliday()">เพิ่ม</button>
+        </div>
+        <button class="btn bg-white border border-navy-700 text-navy-700 hover:bg-navy-50 mb-3" @click="loadThaiHolidays2026()">โหลดวันหยุดปี 2569 (2026)</button>
+        <div class="max-h-64 overflow-y-auto">
+          <table class="tbl w-full text-sm border-collapse">
+            <thead class="bg-navy-50 text-navy-800"><tr><th>วันที่</th><th>ชื่อ</th><th></th></tr></thead>
+            <tbody><template x-for="h in master.holidays" :key="h.id"><tr><td class="px-2 whitespace-nowrap" x-text="h.date"></td><td><input class="field" x-model="h.name" aria-label="ชื่อวันหยุด"></td><td class="text-center"><button class="text-red-600 text-xs underline" @click="removeHoliday(h)">ลบ</button></td></tr></template></tbody>
+          </table>
+        </div>
+        <p x-show="!master.holidays.length" class="text-sm text-slate-500 mt-2">ยังไม่มีวันหยุด กดโหลดวันหยุดปี 2569 หรือเพิ่มเอง</p>
+      </div>
       <div class="bg-white rounded-md border border-slate-200 p-4">
         <h3 class="font-semibold text-navy-800 mb-1" x-text="'สิทธิ์ / กลุ่มรถเพิ่มเติม (' + groupList.length + ')'"></h3>
         <p class="text-xs text-slate-600 mb-3">เพิ่มกลุ่มได้ เช่น บริษัทรถเช่าแต่ละเจ้า (รถเช่า Max speed) แต่ละกลุ่มได้เมนูของตัวเอง และเลือกเป็นสิทธิ์ตอนสร้างบัญชีได้ ผู้ใช้ในกลุ่มเห็นและกรอกได้เฉพาะรถที่ตั้งประเภทเป็นกลุ่มนั้น</p>
@@ -812,7 +862,7 @@ function dispatchApp() {
     done:     { label: 'จบงาน รอตรวจสอบ', head: 'bg-orange-600', badge: 'bg-orange-600 text-white' },
     verified: { label: 'ตรวจสอบแล้ว',     head: 'bg-green-700',  badge: 'bg-green-700 text-white' }
   };
-  const seedMaster = () => ({ groups: [],
+  const seedMaster = () => ({ groups: [], holidays: [],
     employees: INITIAL_EMPLOYEES.map(e => Object.assign({ id: uid(), role: 'both', active: true }, e)),
     vehicles: [{ id: uid(), plate: '96-1251', note: '' }],
     checker: '',
@@ -831,6 +881,7 @@ function dispatchApp() {
     dlg: { open: false, msg: '', fn: null },
     tab: 'dispatch', jobId: null, selVehicle: null, justSaved: null, savedErr: false,
     newGroup: '', logo: LOGO,
+    dt: { from: today().slice(0, 8) + '01', to: today(), group: '' }, newHoliday: { date: '', name: '' }, dtOpen: '',
     get tabs() { return [{ id: 'dispatch', label: 'ใบงาน' }, { id: 'drivers', label: 'รถ / ทะเบียน' }, { id: 'rentals', label: 'รถเช่า' }].concat((this.master.groups || []).map(g => ({ id: g.id, label: g.name })), [{ id: 'dashboard', label: 'Dashboard' }, { id: 'admin', label: 'Admin' }]); },
     tabLabel(id) { const x = this.tabs.find(t => t.id === id); return x ? x.label : ''; },
     master: seedMaster(), history: [], range: '30',
@@ -1329,6 +1380,46 @@ function dispatchApp() {
     autoStartMile(d) { if (!Number(d.startMile)) { const p = this.prevMile(d); if (p) d.startMile = p.value; } },
     mileWarn(d) { const p = this.prevMile(d), s = Number(d.startMile); return !!(p && s && s < p.value); },
     mileHint(d) { const p = this.prevMile(d); if (!p) return ''; return 'ก่อนหน้า: ' + this.fmt(p.value) + ' กม. (ใบงาน ' + p.docNo + ')' + (this.mileWarn(d) ? ' · เลขไมล์ออกน้อยกว่าครั้งก่อน กรุณาตรวจสอบ' : ''); },
+    // ---- Downtime: วันทำงาน (จันทร์-ศุกร์ ที่ไม่ใช่วันหยุดตามประเพณี) ที่รถไม่มีใบงาน ----
+    get holidaySet() { return new Set((this.master.holidays || []).map(h => h.date)); },
+    isWorkDay(iso) { const w = new Date(iso + 'T00:00:00Z').getUTCDay(); return w !== 0 && w !== 6 && !this.holidaySet.has(iso); },
+    get dtRows() {
+      const { from, to, group } = this.dt, t0 = today(), end = to && to < t0 ? to : t0;
+      if (!from || from > end) return [];
+      const days = [];
+      for (const d = new Date(from + 'T00:00:00Z'); d.toISOString().slice(0, 10) <= end; d.setUTCDate(d.getUTCDate() + 1)) { const s = d.toISOString().slice(0, 10); if (this.isWorkDay(s)) days.push(s); }
+      const ran = {};
+      this.allDocs.forEach(d => { if (!this.hasData(d)) return; const k = this.normPlate(d.vehicle); if (!k) return; (ran[k] = ran[k] || new Set()).add(d.date); });
+      return this.master.vehicles.filter(v => v.plate.trim() && (!group || this.fleetOf(v.plate) === group)).map(v => {
+        const r = ran[this.normPlate(v.plate)] || new Set(), dates = days.filter(s => !r.has(s)), run = days.length - dates.length;
+        return { id: v.id, plate: v.plate.trim(), fleet: this.groupName(this.fleetOf(v.plate)), work: days.length, run, down: dates.length, pct: days.length ? Math.round(run / days.length * 1000) / 10 : 0, dates };
+      }).sort((a, b) => b.down - a.down || a.plate.localeCompare(b.plate));
+    },
+    get dtTotal() { const r = this.dtRows; return { down: r.reduce((s, x) => s + x.down, 0), run: r.reduce((s, x) => s + x.run, 0), work: r.reduce((s, x) => s + x.work, 0) }; },
+    async exportDowntime(kind) {
+      const rows = this.dtRows; if (!rows.length) { this.dxErr = true; this.dxMsg = 'ไม่มีข้อมูลในช่วงที่เลือก'; return; }
+      const data = kind === 'detail'
+        ? [['ทะเบียนรถ', 'กลุ่ม', 'วันที่ Downtime']].concat(rows.flatMap(r => r.dates.map(d => [r.plate, r.fleet, d])))
+        : [['ทะเบียนรถ', 'กลุ่ม', 'วันทำงาน', 'วันที่วิ่งงาน', 'Downtime (วัน)', 'อัตราการใช้รถ (%)']].concat(rows.map(r => [r.plate, r.fleet, r.work, r.run, r.down, r.pct]));
+      if (await this.saveFile('downtime-' + kind + '_' + this.dt.from + '_' + this.dt.to + '.csv', new Blob([this.csvText(data)], { type: 'text/csv;charset=utf-8' }))) { this.dxErr = false; this.dxMsg = 'ส่งออก Downtime แล้ว ' + (data.length - 1) + ' แถว'; }
+    },
+    addHoliday() {
+      const { date, name } = this.newHoliday;
+      if (!date) return this.msg(false, 'กรุณาเลือกวันที่วันหยุด');
+      if ((this.master.holidays || []).some(h => h.date === date)) return this.msg(false, 'มีวันหยุดวันที่ ' + date + ' อยู่แล้ว');
+      this.master.holidays.push({ id: uid(), date, name: name.trim() || 'วันหยุด' });
+      this.master.holidays.sort((a, b) => a.date.localeCompare(b.date));
+      this.newHoliday = { date: '', name: '' }; this.msg(true, 'เพิ่มวันหยุดแล้ว');
+    },
+    removeHoliday(h) { this.master.holidays = this.master.holidays.filter(x => x.id !== h.id); },
+    loadThaiHolidays2026() {
+      const L = [['2026-01-01', 'วันขึ้นปีใหม่'], ['2026-01-02', 'วันหยุดพิเศษ'], ['2026-03-03', 'วันมาฆบูชา'], ['2026-04-06', 'วันจักรี'], ['2026-04-13', 'วันสงกรานต์'], ['2026-04-14', 'วันสงกรานต์'], ['2026-04-15', 'วันสงกรานต์'],
+        ['2026-05-01', 'วันแรงงานแห่งชาติ'], ['2026-05-04', 'วันฉัตรมงคล'], ['2026-06-01', 'ชดเชยวันวิสาขบูชา'], ['2026-06-03', 'วันเฉลิมพระชนมพรรษาพระบรมราชินี'], ['2026-07-28', 'วันเฉลิมพระชนมพรรษา ร.10'], ['2026-07-29', 'วันอาสาฬหบูชา'], ['2026-07-30', 'วันเข้าพรรษา'],
+        ['2026-08-12', 'วันแม่แห่งชาติ'], ['2026-10-13', 'วันคล้ายวันสวรรคต ร.9'], ['2026-10-23', 'วันปิยมหาราช'], ['2026-12-07', 'ชดเชยวันพ่อแห่งชาติ'], ['2026-12-10', 'วันรัฐธรรมนูญ'], ['2026-12-31', 'วันสิ้นปี']];
+      let n = 0; L.forEach(([date, name]) => { if (!this.master.holidays.some(h => h.date === date)) { this.master.holidays.push({ id: uid(), date, name }); n++; } });
+      this.master.holidays.sort((a, b) => a.date.localeCompare(b.date));
+      this.msg(true, 'เพิ่มวันหยุดปี 2569 แล้ว ' + n + ' วัน กรุณาตรวจเทียบกับประกาศของบริษัท');
+    },
     maxLoadOf(plate) { const v = this.master.vehicles.find(x => this.normPlate(x.plate) === this.normPlate(plate) && this.normPlate(plate)); return v ? Number(v.maxLoad) || 0 : 0; },
     loadPct(d) { const m = this.maxLoadOf(d.vehicle); return m ? Math.round(this.docStats(d).kg / m * 1000) / 10 : null; },
     loadText(d) { const p = this.loadPct(d); return p === null ? '' : this.fmt(p) + '% ของ Max load ' + this.fmt(this.maxLoadOf(d.vehicle)) + ' KG' + (p > 100 ? ' · เกิน Max load' : ''); },
@@ -1514,6 +1605,7 @@ function dispatchApp() {
     },
     ensureMaster() {
       if (!this.master.groups) this.master.groups = [];
+      if (!this.master.holidays) this.master.holidays = [];
       (this.master.vehicles || []).forEach(v => { if (!v.type) v.type = 'own'; });
       const m = this.master;
       if (!m.docNo) m.docNo = { yearType: 'CE', pad: 3, sep: '' };
