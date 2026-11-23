@@ -63,7 +63,7 @@ tailwind.config = { theme: { extend: {
         <button type="submit" class="btn w-full bg-navy-700 text-white hover:bg-navy-800" :disabled="authBusy" x-text="authBusy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'"></button>
       </form><p class="text-xs text-slate-400 text-center mt-4">กรุณาเข้าสู่ระบบด้วยบัญชีที่ผู้ดูแลกำหนด</p>
       <details class="mt-4 text-xs text-slate-600 border-t border-slate-200 pt-3">
-        <summary class="cursor-pointer font-semibold">ตั้งค่า Google Sheet </summary>
+        <summary class="cursor-pointer font-semibold">ตั้งค่า Google Sheet (ซิงค์ข้อมูลเมื่อใช้นอก claude.ai)</summary>
         <p class="mt-2">วาง URL ของ Web app (ลงท้าย /exec) และรหัสลับ (TOKEN) ที่ตั้งใน Apps Script ทำครั้งเดียวต่อเครื่อง</p>
         <input class="field text-xs mt-2" x-model.trim="sheetUrl" placeholder="https://script.google.com/macros/s/.../exec">
         <input class="field text-xs mt-2" x-model.trim="sheetToken" placeholder="TOKEN">
@@ -72,7 +72,7 @@ tailwind.config = { theme: { extend: {
       </details>
     </div>
   </div>
-  <div class="no-print flex justify-end items-center gap-3 mb-2 text-sm"><span class="text-xs" :class="syncState === 'err' ? 'text-red-600' : (syncState === 'on' ? 'text-green-700' : 'text-slate-500')" x-text="'☁ ' + syncMsg"></span><span x-show="liveMsg" class="text-xs font-semibold text-orange-700 bg-orange-100 rounded px-2 py-0.5" x-text="liveMsg"></span><button x-show="dbRef" class="text-xs text-navy-700 underline" @click="scheduleSync(0)">ซิงค์ตอนนี้</button><span class="text-slate-600" x-text="authUser ? authUser.username + ' · ' + roleLabel(authUser.role) : ''"></span><button x-show="authUser" class="text-red-600 underline" @click="logout()">ออกจากระบบ</button></div>
+  <div class="no-print flex justify-end items-center gap-3 mb-2 text-sm"><span class="text-xs" :class="syncState === 'err' ? 'text-red-600' : (syncState === 'on' ? 'text-green-700' : 'text-slate-500')" x-text="'☁ ' + syncMsg"></span><span x-show="liveMsg" class="text-xs font-semibold text-orange-700 bg-orange-100 rounded px-2 py-0.5" x-text="liveMsg"></span><button x-show="dbRef" class="text-xs text-navy-700 underline" @click="scheduleSync(0)">ซิงค์ตอนนี้</button><button x-show="dbRef" class="text-xs text-slate-500 underline" @click="resyncFromDb()">ดึงข้อมูลใหม่</button><span class="text-slate-600" x-text="authUser ? authUser.username + ' · ' + roleLabel(authUser.role) : ''"></span><button x-show="authUser" class="text-red-600 underline" @click="logout()">ออกจากระบบ</button></div>
 
   <nav class="no-print flex gap-1 mb-3 px-2 pt-3 rounded-xl overflow-x-auto whitespace-nowrap shadow" style="background:linear-gradient(180deg,#14408c,#164aa1)" role="tablist">
     <template x-for="t in tabs.filter(t => allowedTabs.includes(t.id))" :key="t.id">
@@ -980,7 +980,7 @@ function dispatchApp() {
   return {
     doc: blankDoc(),
     savedMsg: '',
-    dbRef: null, syncState: 'off', syncMsg: 'โหมดในเครื่อง', syncMeta: {}, syncTimer: null, syncBusy: false, syncAgain: false, liveMsg: '', sheetUrl: '', sheetToken: '', liveReady: false, liveTimer: null,
+    dbRef: null, syncState: 'off', syncMsg: 'โหมดในเครื่อง', syncMeta: {}, syncTimer: null, syncBusy: false, syncAgain: false, jobsSeen: false, liveMsg: '', sheetUrl: '', sheetToken: '', liveReady: false, liveTimer: null,
     pasteText: '', importMsg: '', importOk: true,
     dlg: { open: false, msg: '', fn: null },
     tab: 'dispatch', jobId: null, selVehicle: null, justSaved: null, savedErr: false,
@@ -1076,6 +1076,7 @@ function dispatchApp() {
       };
     },
     async initSync() {
+      try { this.syncMeta = JSON.parse(localStorage.getItem('vschem-sync-meta') || '{}') || {}; } catch (e) { this.syncMeta = {}; }
       try { const us = this.localUsers(); let ch = false; for (const u of us) if (!u.hash && u.password) { await this.setPw(u, u.password); ch = true; } if (ch) this.saveUsers(us); } catch (e) {}
       try { this.dbRef = (window.claude && await window.claude.use('db')) || null; } catch (e) { this.dbRef = null; }
       if (!this.dbRef) {
@@ -1087,6 +1088,7 @@ function dispatchApp() {
       ['jobs', 'master', 'accounts'].forEach(col => this.dbRef.collection(col).onSnapshot(snap => this.pull(col, snap), e => this.syncFail(e)));
       setInterval(() => this.scheduleSync(0), 15000);
       setTimeout(() => { this.liveReady = true; }, 3000);
+      setTimeout(() => { if (!this.jobsSeen) { this.jobsSeen = true; this.scheduleSync(0); } }, 12000);
       this.scheduleSync(300);
     },
     syncFail(e) { this.syncState = 'err'; this.syncMsg = 'ซิงค์ไม่สำเร็จ: ' + ((e && (e.message || e.code)) || 'ไม่ทราบสาเหตุ') + ' (ข้อมูลยังเก็บในเครื่อง)'; },
@@ -1110,6 +1112,7 @@ function dispatchApp() {
     },
     async pushAll() {
       if (!this.dbRef) return;
+      if (!this.jobsSeen) return;                                          // รอโหลดข้อมูลจากฐานข้อมูลครั้งแรกก่อน กันส่งใบงานที่ถูกลบแล้วกลับขึ้นไป
       if (this.syncBusy) { this.syncAgain = true; return; }
       this.syncBusy = true;
       try {
@@ -1120,23 +1123,32 @@ function dispatchApp() {
           await this.dbRef.doc(it.key).set({ t, json: s });
           this.syncMeta[it.key] = { t, sig: s };
         }
-        this.syncOk();
+        this.saveMeta(); this.syncOk();
       } catch (e) { this.syncFail(e); }
       finally { this.syncBusy = false; if (this.syncAgain) { this.syncAgain = false; this.scheduleSync(500); } }
     },
     async syncDelete(key) {
-      delete this.syncMeta[key];
+      delete this.syncMeta[key]; this.saveMeta();
       if (!this.dbRef) return;
       try { await this.dbRef.doc(key).delete(); } catch (e) { this.syncFail(e); }
     },
+    saveMeta() { try { localStorage.setItem('vschem-sync-meta', JSON.stringify(this.syncMeta)); } catch (e) { /* ไม่เป็นไร */ } },
+    removeJobLocal(id) {
+      let name = '';
+      if (id === this.doc.id) { if (this.hasData(this.doc)) { name = this.doc.docNo; this.doc = this.newDoc(); } }
+      else { const h = this.history.find(x => x.id === id); if (h) { name = h.docNo; this.history = this.history.filter(x => x.id !== id); } }
+      if (name && this.liveReady) { this.liveMsg = 'ใบงาน ' + (name || '-') + ' ถูกลบจากเครื่องอื่น'; clearTimeout(this.liveTimer); this.liveTimer = setTimeout(() => { this.liveMsg = ''; }, 5000); }
+    },
     pull(col, snap) {
       try {
+        const seen = new Set();
         snap.docChanges().forEach(ch => {
           const id = ch.doc.id, key = col + '/' + id;
           if (ch.type === 'removed') {
-            if (col === 'jobs' && id !== this.doc.id && this.syncMeta[key]) { this.history = this.history.filter(h => h.id !== id); }
+            if (col === 'jobs') this.removeJobLocal(id);                  // ถูกลบที่ฐานข้อมูล ให้ลบในเครื่องนี้ด้วย
             delete this.syncMeta[key]; return;
           }
+          seen.add(id);
           const r = ch.doc.data() || {}, m = this.syncMeta[key];
           if (!r.json || (m && Number(r.t) <= m.t)) return;
           let obj; try { obj = JSON.parse(r.json); } catch (e) { return; }
@@ -1144,8 +1156,20 @@ function dispatchApp() {
           else if (col === 'master') this.applyMaster(key, r, obj);
           else this.applyAccount(key, r, obj);
         });
-        this.syncOk();
+        if (col === 'jobs' && !this.jobsSeen && !(snap.metadata && snap.metadata.fromCache)) {
+          // โหลดครั้งแรก: ใบงานที่เคยซิงค์แล้วแต่ไม่อยู่ในฐานข้อมูลแล้ว แปลว่าถูกลบไปตอนเครื่องนี้ไม่ได้เปิด
+          [...this.history.map(h => h.id), this.doc.id].forEach(id => { if (!seen.has(id) && this.syncMeta['jobs/' + id]) { this.removeJobLocal(id); delete this.syncMeta['jobs/' + id]; } });
+          this.jobsSeen = true; this.scheduleSync(0);
+        }
+        this.saveMeta(); this.syncOk();
       } catch (e) { this.syncFail(e); }
+    },
+    resyncFromDb() {
+      this.ask('ล้างใบงานที่ค้างในเครื่องนี้ แล้วดึงข้อมูลใหม่จากฐานข้อมูล? (ใบงานที่ยังไม่ได้ซิงค์ขึ้นฐานข้อมูลจะหายไป)', () => {
+        this.history = []; this.syncMeta = {}; this.saveMeta();
+        try { localStorage.setItem(HKEY, '[]'); } catch (e) {}
+        location.reload();
+      });
     },
     applyJob(key, id, r, obj) {
       const local = this.localJob(id), m = this.syncMeta[key];
