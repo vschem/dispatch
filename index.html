@@ -63,7 +63,7 @@ tailwind.config = { theme: { extend: {
         <button type="submit" class="btn w-full bg-navy-700 text-white hover:bg-navy-800" :disabled="authBusy" x-text="authBusy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'"></button>
       </form><p class="text-xs text-slate-400 text-center mt-4">กรุณาเข้าสู่ระบบด้วยบัญชีที่ผู้ดูแลกำหนด</p>
       <details class="mt-4 text-xs text-slate-600 border-t border-slate-200 pt-3">
-        <summary class="cursor-pointer font-semibold">ตั้งค่า Google Sheet </summary>
+        <summary class="cursor-pointer font-semibold">ตั้งค่า Google Sheet (ซิงค์ข้อมูลเมื่อใช้นอก claude.ai)</summary>
         <p class="mt-2">วาง URL ของ Web app (ลงท้าย /exec) และรหัสลับ (TOKEN) ที่ตั้งใน Apps Script ทำครั้งเดียวต่อเครื่อง</p>
         <input class="field text-xs mt-2" x-model.trim="sheetUrl" placeholder="https://script.google.com/macros/s/.../exec">
         <input class="field text-xs mt-2" x-model.trim="sheetToken" placeholder="TOKEN">
@@ -268,6 +268,7 @@ tailwind.config = { theme: { extend: {
         <div class="rounded-md border border-slate-300 p-3"><label class="lbl">น้ำมัน (ลิตร)</label><input type="number" min="0" step="any" class="field" x-model.number="doc.fuelLiters" inputmode="decimal"></div>
         <div class="rounded-md border border-slate-300 p-3"><label class="lbl">น้ำมัน (บาท)</label><input type="number" min="0" step="any" class="field" x-model.number="doc.fuelBaht" inputmode="decimal"></div>
         <div class="rounded-md border border-slate-300 p-3"><label class="lbl">ค่าทางด่วน (บาท)</label><input type="number" min="0" step="any" class="field" x-model.number="doc.tollFee" inputmode="decimal"></div>
+        <template x-if="isAdmin && isRentalDoc(doc)"><div class="rounded-md border-2 p-3" style="border-color:#f4c425;background:#fff8dc"><label class="lbl">ราคาเช่า (บาท) · เห็นเฉพาะ Admin</label><input type="number" min="0" step="any" class="field" x-model.number="doc.rentalPrice" inputmode="decimal"></div></template>
         <div class="rounded-md border border-navy-600 bg-navy-50 p-3"><div class="lbl">ระยะทางรวม</div>
           <div class="text-2xl font-bold text-navy-800"><span x-text="fmt(distance)"></span> <span class="text-sm font-medium text-slate-500">กม.</span></div>
           <div x-show="distanceError" class="text-xs text-red-600 mt-1">เลขไมล์กลับน้อยกว่าเลขไมล์ออก กรุณาตรวจสอบ</div></div>
@@ -436,6 +437,7 @@ tailwind.config = { theme: { extend: {
             <div><label class="lbl">น้ำมัน (ลิตร)</label><input type="number" min="0" step="any" class="field" x-model.number="jobView.d.fuelLiters" inputmode="decimal"></div>
             <div><label class="lbl">น้ำมัน (บาท)</label><input type="number" min="0" step="any" class="field" x-model.number="jobView.d.fuelBaht" inputmode="decimal"></div>
             <div class="col-span-2"><label class="lbl">ค่าทางด่วน (บาท)</label><input type="number" min="0" step="any" class="field" x-model.number="jobView.d.tollFee" inputmode="decimal"></div>
+            <template x-if="isAdmin && isRentalDoc(jobView.d)"><div class="col-span-2 rounded-md border-2 p-2" style="border-color:#f4c425;background:#fff8dc"><label class="lbl">ราคาเช่า (บาท) · เห็นเฉพาะ Admin</label><input type="number" min="0" step="any" class="field" x-model.number="jobView.d.rentalPrice" inputmode="decimal"></div></template>
             <div class="col-span-2 rounded-md border border-navy-600 bg-navy-50 p-3">
               <span class="lbl">ระยะทางรวม</span>
               <span class="text-2xl font-bold text-navy-800" x-text="fmt(jobView.st.dist) + ' กม.'"></span>
@@ -982,7 +984,7 @@ function dispatchApp() {
   const blankItem = () => ({ id: Date.now() + Math.random(), inv:'', customer:'', product:'', bp:'', qty:null, unit:'KG', kg:null,
                              batch:'', dest:'', order:0, trip:null, timeIn:'', timeOut:'', mileage:null, remark:'', flag:false });
   const blankDoc = () => ({ id: uid(), docNoAuto: true, crewList: ['', '', ''], rateSnap: null, crewNightSnap: null, signDriver:'', signChecker:'', tripCount:null, overnightCount:null, tripRate:null, overnightRate:null, status:'open', doneAt:'', verifiedAt:'', verifiedBy:'', docNo:'', date:today(), vehicle:'', driver:'', crew:'', items:[blankItem()],
-                            startMile:null, endMile:null, fuelLiters:null, fuelBaht:null, tollFee:null, check:{ pack:false, load:false, secure:false } });
+                            startMile:null, endMile:null, fuelLiters:null, fuelBaht:null, tollFee:null, rentalPrice:null, check:{ pack:false, load:false, secure:false } });
   return {
     doc: blankDoc(),
     savedMsg: '',
@@ -1455,12 +1457,12 @@ function dispatchApp() {
         .sort((x, y) => (y.d.date || '').localeCompare(x.d.date || ''));
     },
     get dash() {
-      const docs = this.rangeDocs, tot = { kg: 0, stops: 0, items: 0, dist: 0, trips: 0, pay: 0 };
+      const docs = this.rangeDocs, tot = { kg: 0, stops: 0, items: 0, dist: 0, trips: 0, pay: 0, rent: 0 };
       const day = {}, drv = {}, veh = {}, cus = {}, pay = {};
       const add = (m, k, st) => { const r = m[k] || (m[k] = { kg: 0, stops: 0, dist: 0, pay: 0 }); r.kg += st.kg; r.stops += st.stops; r.dist += st.dist; r.pay += st.pay; };
       docs.forEach(d => {
         const st = this.docStats(d);
-        tot.kg += st.kg; tot.stops += st.stops; tot.items += st.items; tot.dist += st.dist; tot.trips += st.trips; tot.pay += st.pay;
+        tot.kg += st.kg; tot.stops += st.stops; tot.items += st.items; tot.dist += st.dist; tot.trips += st.trips; tot.pay += st.pay; tot.rent += Number(d.rentalPrice) || 0;
         add(day, d.date || 'ไม่ระบุวันที่', st); add(drv, d.driver || 'ไม่ระบุ', st); add(veh, d.vehicle || 'ไม่ระบุ', st);
         Object.entries(st.cust).forEach(([c, w]) => { cus[c] = (cus[c] || 0) + w; });
         this.fees(d).lines.forEach(l => { const k = normName(l.name), r = pay[k] || (pay[k] = { label: l.name, amt: 0, trips: 0 }); r.amt += l.total; r.trips += l.trips; });
@@ -1475,7 +1477,7 @@ function dispatchApp() {
           { label: 'รายการสินค้า', value: tot.items, unit: 'รายการ' }, { label: 'น้ำหนักรวม', value: tot.kg, unit: 'KG' },
           { label: 'ระยะทางรวม', value: tot.dist, unit: 'กม.' },
           { label: 'จำนวนเที่ยว', value: tot.trips, unit: 'เที่ยว' }, { label: 'ค่าตอบแทนรวม', value: tot.pay, unit: 'บาท' }
-        ],
+        ].concat(this.dashG !== 'own' ? [{ label: 'ค่าเช่ารวม', value: tot.rent, unit: 'บาท' }] : []),
         lists: [
           mk('น้ำหนักที่ส่งรายวัน (KG)', toRows(day).sort((x, y) => x.label.localeCompare(y.label)).slice(-14)),
           mk('ตามทะเบียนรถ (KG)', byKg(toRows(veh))),
@@ -1585,6 +1587,8 @@ function dispatchApp() {
       const y = this.holYear, n = this.holidaysOfYear.length;
       this.ask('ลบวันหยุดทั้งหมดของปี พ.ศ. ' + (Number(y) + 543) + ' (' + n + ' วัน)?', () => { this.master.holidays = this.master.holidays.filter(h => h.date.slice(0, 4) !== String(y)); this.msg(true, 'ลบวันหยุดปีนี้แล้ว'); });
     },
+    get isAdmin() { return !!(this.authUser && this.authUser.role === 'admin'); },
+    isRentalDoc(d) { return this.fleetOf(d.vehicle) !== 'own'; },
     maxLoadOf(plate) { const v = this.master.vehicles.find(x => this.normPlate(x.plate) === this.normPlate(plate) && this.normPlate(plate)); return v ? Number(v.maxLoad) || 0 : 0; },
     tripLoads(d) {
       const m = this.maxLoadOf(d.vehicle), orders = []; let last = null;
@@ -1844,21 +1848,21 @@ function dispatchApp() {
       const docs = this.dxDocs(kind === 'all'), nv = v => (v === null || v === undefined) ? '' : v;
       if (kind === 'docs') {
         const head = ['วันที่', 'เลขที่ใบงาน', 'ทะเบียนรถ', 'พนักงานขับรถ', 'ผู้ช่วย', 'สถานะใบงาน', 'จำนวน Drop', 'จำนวนเที่ยว', 'จำนวนคืนค้างคืน', 'จำนวนรายการสินค้า',
-          'น้ำหนักรวม (KG)', 'Max load (KG)', 'บรรทุกสูงสุดต่อเที่ยว (%)', 'เลขไมล์ออกจากโกดัง', 'เลขไมล์กลับถึงโกดัง', 'ระยะทางรวม (กม.)', 'น้ำมัน (ลิตร)', 'น้ำมัน (บาท)', 'ค่าทางด่วน (บาท)', 'ค่าเที่ยว (บาท)', 'ค่าค้างคืน (บาท)', 'ค่าตอบแทนรวม (บาท)',
+          'น้ำหนักรวม (KG)', 'Max load (KG)', 'บรรทุกสูงสุดต่อเที่ยว (%)', 'เลขไมล์ออกจากโกดัง', 'เลขไมล์กลับถึงโกดัง', 'ระยะทางรวม (กม.)', 'น้ำมัน (ลิตร)', 'น้ำมัน (บาท)', 'ค่าทางด่วน (บาท)', 'ราคาเช่า (บาท)', 'ค่าเที่ยว (บาท)', 'ค่าค้างคืน (บาท)', 'ค่าตอบแทนรวม (บาท)',
           'ผู้ตรวจสอบ', 'ชื่อผู้ตรวจสอบท้ายใบงาน', 'เวลาจบงาน', 'เวลาตรวจสอบ'];
         return [head].concat(docs.map(d => { const st = this.docStats(d), f = this.fees(d);
           return [d.date, d.docNo, d.vehicle, d.driver, d.crew, this.stat(d).label, st.stops, nv(d.tripCount), nv(d.overnightCount), st.items, st.kg, this.maxLoadOf(d.vehicle) || '', nv(this.loadPct(d)),
-            nv(d.startMile), nv(d.endMile), st.dist, nv(d.fuelLiters), nv(d.fuelBaht), nv(d.tollFee), f.trip, f.night, f.total, d.verifiedBy || '', d.signChecker || '',
+            nv(d.startMile), nv(d.endMile), st.dist, nv(d.fuelLiters), nv(d.fuelBaht), nv(d.tollFee), nv(d.rentalPrice), f.trip, f.night, f.total, d.verifiedBy || '', d.signChecker || '',
             d.doneAt ? this.when(d.doneAt) : '', d.verifiedAt ? this.when(d.verifiedAt) : '']; }));
       }
       const all = kind === 'all';
       const head = ['วันที่', 'เลขที่ใบงาน', 'ทะเบียนรถ', 'พนักงานขับรถ', 'ผู้ช่วย', 'สถานะใบงาน', 'INV#', 'ชื่อลูกค้า', 'สินค้า', 'จำนวน', 'หน่วย', 'น้ำหนัก (KG)',
         'Batch No.', 'สถานที่ส่ง', 'เวลาเข้า', 'เวลาออก', 'เลขไมล์ (ถึงหน้างาน)', 'หมายเหตุ']
-        .concat(all ? ['จำนวนเที่ยว', 'จำนวนคืนค้างคืน', 'เลขไมล์ออกจากโกดัง', 'เลขไมล์กลับถึงโกดัง', 'น้ำมัน (ลิตร)', 'น้ำมัน (บาท)', 'ค่าทางด่วน (บาท)', 'ผู้ตรวจสอบ', 'ค่าตอบแทนรวมของใบงาน (บาท)'] : []);
+        .concat(all ? ['จำนวนเที่ยว', 'จำนวนคืนค้างคืน', 'เลขไมล์ออกจากโกดัง', 'เลขไมล์กลับถึงโกดัง', 'น้ำมัน (ลิตร)', 'น้ำมัน (บาท)', 'ค่าทางด่วน (บาท)', 'ราคาเช่า (บาท)', 'ผู้ตรวจสอบ', 'ค่าตอบแทนรวมของใบงาน (บาท)'] : []);
       const rows = [];
       docs.forEach(d => {
         const base = [d.date, d.docNo, d.vehicle, d.driver, d.crew, this.stat(d).label];
-        const extra = (first) => !all ? [] : (first ? [nv(d.tripCount), nv(d.overnightCount), nv(d.startMile), nv(d.endMile), nv(d.fuelLiters), nv(d.fuelBaht), nv(d.tollFee), d.verifiedBy || '', this.fees(d).total] : ['', '', '', '', '', '', '', '', '']);
+        const extra = (first) => !all ? [] : (first ? [nv(d.tripCount), nv(d.overnightCount), nv(d.startMile), nv(d.endMile), nv(d.fuelLiters), nv(d.fuelBaht), nv(d.tollFee), nv(d.rentalPrice), d.verifiedBy || '', this.fees(d).total] : ['', '', '', '', '', '', '', '', '', '']);
         if (!d.items.length) rows.push(base.concat(['', '', '', '', '', '', '', '', '', '', '', ''], extra(true)));
         d.items.forEach((it, k) => rows.push(base.concat([it.inv, it.customer, it.product, nv(it.qty), it.unit, this.itemKg(it), it.batch, it.dest,
           it.timeIn, it.timeOut, nv(it.mileage), it.remark + (it.bp ? (it.remark ? ' | ' : '') + 'BP: ' + it.bp : '')], extra(k === 0))));
@@ -2000,7 +2004,7 @@ function dispatchApp() {
         + '<div class="top"><div style="display:flex;gap:8px;align-items:center"><img src="' + LOGO + '" style="width:44px;height:44px;border-radius:6px"><div><h1>ใบบันทึกการส่งสินค้ารายวัน</h1>VS Chem · Daily Dispatch &amp; Delivery Record</div></div><div style="text-align:right">เลขที่ใบงาน<br><b style="font-size:18px">' + e(d.docNo) + '</b></div></div>'
         + '<div class="info"><div><b>วันที่:</b> ' + e(d.date) + '</div><div><b>ทะเบียนรถ:</b> ' + e(d.vehicle) + '</div><div><b>พนักงานขับรถ:</b> ' + e(d.driver) + '</div><div><b>ผู้ช่วย:</b> ' + e(crew.join(', ')) + '</div></div>'
         + '<table><thead><tr><th>INV#</th><th>ชื่อลูกค้า</th><th>สินค้า</th><th>จำนวน</th><th>หน่วย</th><th>Batch No.</th><th>สถานที่ส่ง</th><th>เวลาเข้า</th><th>เวลาออก</th><th>เลขไมล์</th><th>หมายเหตุ</th></tr></thead><tbody>' + rows + '</tbody></table>'
-        + '<div class="sum"><span>จุดส่ง: ' + st.stops + '</span><span>จำนวนเที่ยว: ' + e(d.tripCount) + '</span><span>ค้างคืน: ' + e(d.overnightCount) + '</span><span>น้ำหนักรวม: ' + this.fmt(st.kg) + ' KG' + (this.loadPct(d) !== null ? ' (' + this.loadText(d) + ')' : '') + '</span><span>ไมล์ออก: ' + e(d.startMile) + '</span><span>ไมล์กลับ: ' + e(d.endMile) + '</span><span>ระยะทาง: ' + this.fmt(dist) + ' กม.</span><span>น้ำมัน: ' + e(d.fuelLiters) + ' ลิตร / ' + e(d.fuelBaht) + ' บาท</span><span>ค่าทางด่วน: ' + e(d.tollFee) + ' บาท</span></div>'
+        + '<div class="sum"><span>จุดส่ง: ' + st.stops + '</span><span>จำนวนเที่ยว: ' + e(d.tripCount) + '</span><span>ค้างคืน: ' + e(d.overnightCount) + '</span><span>น้ำหนักรวม: ' + this.fmt(st.kg) + ' KG' + (this.loadPct(d) !== null ? ' (' + this.loadText(d) + ')' : '') + '</span><span>ไมล์ออก: ' + e(d.startMile) + '</span><span>ไมล์กลับ: ' + e(d.endMile) + '</span><span>ระยะทาง: ' + this.fmt(dist) + ' กม.</span><span>น้ำมัน: ' + e(d.fuelLiters) + ' ลิตร / ' + e(d.fuelBaht) + ' บาท</span><span>ค่าทางด่วน: ' + e(d.tollFee) + ' บาท</span>' + (this.isAdmin && this.isRentalDoc(d) && d.rentalPrice ? '<span>ราคาเช่า: ' + this.fmt(d.rentalPrice) + ' บาท</span>' : '') + '</div>'
         + '<div><b>เช็คลิสต์ก่อนออกเดินทาง</b>' + chk + '</div>'
         + '<div class="sig"><div>' + e(d.signDriver || d.driver) + '<br>พนักงานขับรถ</div><div>' + e(d.signChecker) + '<br>ผู้ตรวจสอบ</div></div>'
         + (auto === false ? '' : '<script>window.onload=function(){setTimeout(function(){window.print()},400)}<\/script>') + '</body></html>';
