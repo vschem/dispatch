@@ -63,7 +63,7 @@ tailwind.config = { theme: { extend: {
         <button type="submit" class="btn w-full bg-navy-700 text-white hover:bg-navy-800" :disabled="authBusy" x-text="authBusy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'"></button>
       </form><p class="text-xs text-slate-400 text-center mt-4">กรุณาเข้าสู่ระบบด้วยบัญชีที่ผู้ดูแลกำหนด</p>
       <details class="mt-4 text-xs text-slate-600 border-t border-slate-200 pt-3">
-        <summary class="cursor-pointer font-semibold">ตั้งค่า Google Sheet (ซิงค์ข้อมูลเมื่อใช้นอก claude.ai)</summary>
+        <summary class="cursor-pointer font-semibold">ตั้งค่า Google Sheet </summary>
         <p class="mt-2">วาง URL ของ Web app (ลงท้าย /exec) และรหัสลับ (TOKEN) ที่ตั้งใน Apps Script ทำครั้งเดียวต่อเครื่อง</p>
         <input class="field text-xs mt-2" x-model.trim="sheetUrl" placeholder="https://script.google.com/macros/s/.../exec">
         <input class="field text-xs mt-2" x-model.trim="sheetToken" placeholder="TOKEN">
